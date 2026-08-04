@@ -38,23 +38,32 @@ func LoadStore(path string) (*Store, error) {
 func defaultConfig() Config {
 	host, _ := os.Hostname()
 	if host == "" {
-		host = "Lichen node"
+		host = "Rhizome node"
 	}
 	return Config{
-		NodeName:    host,
-		Listen:      fmt.Sprintf("0.0.0.0:%d", DefaultMeshPort),
-		APIListen:   fmt.Sprintf("127.0.0.1:%d", DefaultAPIPort),
-		SOCKSListen: fmt.Sprintf("127.0.0.1:%d", DefaultSOCKSPort),
-		HTTPListen:  fmt.Sprintf("127.0.0.1:%d", DefaultHTTPPort),
-		AutoRelay:   true,
-		Peers:       make(map[string]Peer),
-		Invitations: make(map[string]Invitation),
+		ConfigVersion: CurrentConfig,
+		NodeName:      host,
+		Listen:        fmt.Sprintf("0.0.0.0:%d", DefaultMeshPort),
+		APIListen:     fmt.Sprintf("127.0.0.1:%d", DefaultAPIPort),
+		SOCKSListen:   fmt.Sprintf("127.0.0.1:%d", DefaultSOCKSPort),
+		HTTPListen:    fmt.Sprintf("127.0.0.1:%d", DefaultHTTPPort),
+		Autopilot:     true,
+		AutoRelay:     true,
+		Peers:         make(map[string]Peer),
+		Invitations:   make(map[string]Invitation),
 	}
 }
 
 func normalizeConfig(cfg *Config) {
+	// Lichen configurations had no version or autopilot field. Upgrade them once,
+	// preserving identity, peers, permissions and tunnels.
+	if cfg.ConfigVersion < CurrentConfig {
+		cfg.Autopilot = true
+		cfg.AutoRelay = true
+		cfg.ConfigVersion = CurrentConfig
+	}
 	if cfg.NodeName == "" {
-		cfg.NodeName = "Lichen node"
+		cfg.NodeName = "Rhizome node"
 	}
 	if cfg.Listen == "" {
 		cfg.Listen = fmt.Sprintf("0.0.0.0:%d", DefaultMeshPort)
@@ -135,5 +144,10 @@ func (s *Store) saveLocked() error {
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
+	if err := os.Rename(tmp, s.path); err == nil {
+		return nil
+	}
+	// Windows does not replace an existing file atomically with os.Rename.
+	_ = os.Remove(s.path)
 	return os.Rename(tmp, s.path)
 }
