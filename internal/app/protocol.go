@@ -1,0 +1,76 @@
+package app
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"io"
+)
+
+const maxFrameSize = 1 << 20
+
+type Hello struct {
+	Version    string `json:"version"`
+	NodeID     string `json:"node_id"`
+	Name       string `json:"name"`
+	PublicKey  string `json:"public_key"`
+	Purpose    string `json:"purpose"`
+	Target     string `json:"target,omitempty"`
+	InviteCode string `json:"invite_code,omitempty"`
+	ListenPort int    `json:"listen_port,omitempty"`
+	Timestamp  int64  `json:"timestamp"`
+	Signature  string `json:"signature"`
+}
+
+type BackhaulCommand struct {
+	Open bool `json:"open"`
+}
+
+type Response struct {
+	OK          bool        `json:"ok"`
+	Error       string      `json:"error,omitempty"`
+	NodeID      string      `json:"node_id,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	PublicKey   string      `json:"public_key,omitempty"`
+	Permissions Permissions `json:"permissions,omitempty"`
+	Route       string      `json:"route,omitempty"`
+}
+
+func (h Hello) signingBytes() []byte {
+	h.Signature = ""
+	raw, _ := json.Marshal(h)
+	return raw
+}
+
+func writeFrame(w io.Writer, value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	if len(raw) > maxFrameSize {
+		return errors.New("frame too large")
+	}
+	var size [4]byte
+	binary.BigEndian.PutUint32(size[:], uint32(len(raw)))
+	if _, err := w.Write(size[:]); err != nil {
+		return err
+	}
+	_, err = w.Write(raw)
+	return err
+}
+
+func readFrame(r io.Reader, value any) error {
+	var size [4]byte
+	if _, err := io.ReadFull(r, size[:]); err != nil {
+		return err
+	}
+	n := binary.BigEndian.Uint32(size[:])
+	if n == 0 || n > maxFrameSize {
+		return errors.New("invalid frame size")
+	}
+	raw := make([]byte, n)
+	if _, err := io.ReadFull(r, raw); err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, value)
+}

@@ -1,0 +1,11 @@
+services:
+  reef:
+    build: .
+    container_name: reef
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - reef-data:/data
+
+volumes:
+  reef-data:

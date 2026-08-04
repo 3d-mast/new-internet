@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07130f">
+  <title>Reef 4 — самоорганизующаяся сеть</title>
+  <link rel="stylesheet" href="/reef.css">
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div><strong>Reef</strong><small>версия 4 · сеть сама находит путь</small></div>
+      </div>
+      <div class="top-actions">
+        <button class="secondary" id="inviteOpen">Пригласить устройство</button>
+        <button class="secondary" id="joinOpen">Подключить устройство</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="status-line"><span id="statusDot" class="dot"></span><span id="statusText">Проверка узла…</span></div>
+        <h1 id="heroTitle">Reef запускается</h1>
+        <p id="heroText">Интерфейс, адреса и маршруты появятся здесь автоматически.</p>
+      </div>
+      <button id="autopilotToggle" class="power" disabled>
+        <span class="power-icon">⏻</span>
+        <span id="powerLabel">Запуск…</span>
+      </button>
+    </section>
+
+    <section class="grid metrics">
+      <article class="card metric">
+        <span>Логический IPv4 узла</span>
+        <strong id="overlayIPv4">—</strong>
+        <small>Постоянный адрес личности</small>
+      </article>
+      <article class="card metric">
+        <span>Логический IPv6 узла</span>
+        <strong id="overlayIPv6" class="small-address">—</strong>
+        <small>Постоянный адрес личности</small>
+      </article>
+      <article class="card metric">
+        <span>Системный интерфейс</span>
+        <strong id="interfaceState">проверка</strong>
+        <small id="interfaceNote">Определение режима адресации</small>
+      </article>
+      <article class="card metric">
+        <span>Доверенные узлы</span>
+        <strong id="peerCount">0</strong>
+        <small id="onlineCount">0 онлайн</small>
+      </article>
+    </section>
+
+    <section class="grid content">
+      <article class="card route-card">
+        <div class="section-head">
+          <div><span class="eyebrow">ТЕКУЩЕЕ СОСТОЯНИЕ</span><h2>Маршрут</h2></div>
+          <span id="routeBadge" class="badge">поиск</span>
+        </div>
+        <dl class="facts">
+          <div><dt>Имя устройства</dt><dd id="nodeName">—</dd></div>
+          <div><dt>ID узла</dt><dd id="nodeID" class="mono">—</dd></div>
+          <div><dt>Выходной узел</dt><dd id="selectedExit">не выбран</dd></div>
+          <div><dt>Маршрут</dt><dd id="routeValue">ожидание</dd></div>
+          <div><dt>Задержка</dt><dd id="latencyValue">—</dd></div>
+          <div><dt>Локальный интерфейс</dt><dd id="uiURL" class="mono">—</dd></div>
+        </dl>
+        <div class="notice" id="addressNotice">
+          Логический IP не означает, что Windows уже создала TUN-интерфейс. Reef показывает это раздельно и не подменяет реальное состояние красивой надписью.
+        </div>
+      </article>
+
+      <article class="card data-card">
+        <div class="section-head"><div><span class="eyebrow">ГДЕ ЛЕЖАТ ДАННЫЕ</span><h2>Узел и файлы</h2></div></div>
+        <label>Каталог данных<input id="dataDir" readonly value="Определяется…"></label>
+        <label>Транспортные адреса<textarea id="endpoints" readonly>Определяются…</textarea></label>
+        <div class="button-row">
+          <button class="secondary" id="copyNodeData">Скопировать данные узла</button>
+          <button class="secondary" id="runDiagnostics">Самопроверка</button>
+        </div>
+        <div id="diagnostics" class="diagnostics"></div>
+      </article>
+    </section>
+
+    <section class="card activity-card">
+      <div class="section-head"><div><span class="eyebrow">КАК ЭТО РАБОТАЕТ</span><h2>Никакой ручной маршрутизации</h2></div></div>
+      <div class="steps">
+        <div><b>1</b><span><strong>Обмен приглашением</strong><small>Проверяется подпись и закрепляется ключ устройства.</small></span></div>
+        <div><b>2</b><span><strong>Поиск пути</strong><small>Прямое соединение, relay и обратный NAT-канал проверяются автоматически.</small></span></div>
+        <div><b>3</b><span><strong>Самовосстановление</strong><small>При отказе Reef выбирает следующий рабочий маршрут и не оставляет Windows с мёртвым прокси.</small></span></div>
+      </div>
+    </section>
+
+    <footer>
+      <span id="versionLine">Reef 4 · LICHEN/2</span>
+      <span>Автор и прародитель проекта: Алексей Прокопчук</span>
+    </footer>
+  </main>
+
+  <dialog id="inviteDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><h2>Пригласить устройство</h2><button value="cancel" class="close">×</button></div>
+      <p>Выберите возможности один раз. Маршрут и адреса Reef настроит сам.</p>
+      <label class="check"><input id="allowExit" type="checkbox"><span>Разрешить выход в интернет через этот узел</span></label>
+      <label class="check"><input id="allowLAN" type="checkbox"><span>Разрешить доступ к локальным TCP-сервисам</span></label>
+      <label class="check"><input id="allowRelay" type="checkbox" checked><span>Разрешить безопасный relay и восстановление маршрута</span></label>
+      <button type="button" id="createInvite" class="primary wide">Создать приглашение</button>
+      <textarea id="inviteToken" readonly placeholder="Здесь появится ключ"></textarea>
+      <button type="button" id="copyInvite" class="secondary wide">Скопировать ключ</button>
+    </form>
+  </dialog>
+
+  <dialog id="joinDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><h2>Подключить устройство</h2><button value="cancel" class="close">×</button></div>
+      <p>Вставьте подписанное приглашение. Reef проверит личность и сам начнёт искать маршрут.</p>
+      <textarea id="joinToken" placeholder="lch1.…"></textarea>
+      <button type="button" id="joinButton" class="primary wide">Проверить и подключить</button>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status"></div>
+  <script src="/reef.js"></script>
+</body>
+</html>

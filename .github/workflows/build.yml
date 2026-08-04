@@ -1,0 +1,165 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+      - run: node --check internal/app/web/reef.js
+      - run: go build -trimpath -ldflags "-s -w" -o dist/reef-linux-amd64 ./cmd/reef
+      - name: Smoke test embedded interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          data="$RUNNER_TEMP/reef-smoke"
+          ./dist/reef-linux-amd64 --no-browser --data-dir "$data" >"$RUNNER_TEMP/reef.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:47832/api/status >"$RUNNER_TEMP/status.json"; then
+              ready=1
+              break
+            fi
+            sleep 0.2
+          done
+          test "$ready" = 1
+          curl -fsS http://127.0.0.1:47832/ | grep -q "Reef 4"
+          grep -q '"product":"Reef"' "$RUNNER_TEMP/status.json"
+          grep -q '"release":"4.0.0"' "$RUNNER_TEMP/status.json"
+      - run: docker build -t reef-ci .
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - name: Build Windows GUI and diagnostic binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/reef.exe ./cmd/reef
+          go build -trimpath -ldflags "-s -w" -o dist/reef-console.exe ./cmd/reef
+          Copy-Item LICENSE, NOTICE -Destination dist
+          @'
+          @echo off
+          curl.exe -fsS http://127.0.0.1:47832/api/status >nul 2>&1
+          if errorlevel 1 (
+            start "Reef" "%~dp0reef.exe"
+            timeout /t 2 /nobreak >nul
+          )
+          start "Reef Interface" "http://127.0.0.1:47832/"
+          '@ | Set-Content -Encoding ASCII dist/open-reef.cmd
+          @'
+          REEF 4 FOR WINDOWS
+
+          1. Run reef.exe.
+          2. The browser interface opens automatically.
+          3. If it does not open, run open-reef.cmd.
+          4. If Reef reports an error, run reef-console.exe and send reef.log.
+
+          Interface: http://127.0.0.1:47832/
+          Data: %APPDATA%\Reef (or the migrated Rhizome/Lichen directory)
+
+          The displayed overlay IP is a stable identity address. Reef 4 does not
+          claim that a Windows TUN interface exists until Wintun is implemented.
+          '@ | Set-Content -Encoding UTF8 dist/README-WINDOWS.txt
+      - name: Smoke test Windows console build and interface
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP "reef-smoke"
+          $process = Start-Process -FilePath ".\dist\reef-console.exe" -ArgumentList "--no-browser", "--data-dir", $data -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 50; $i++) {
+              try {
+                $status = Invoke-RestMethod -Uri "http://127.0.0.1:47832/api/status" -TimeoutSec 1
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Milliseconds 200
+              }
+            }
+            if (-not $ready) { throw "Reef interface did not start" }
+            if ($status.product -ne "Reef") { throw "Unexpected product: $($status.product)" }
+            if ($status.release -ne "4.0.0") { throw "Unexpected release: $($status.release)" }
+            $page = Invoke-WebRequest -Uri "http://127.0.0.1:47832/" -UseBasicParsing
+            if ($page.Content -notmatch "Reef 4") { throw "Embedded GUI is missing" }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reef-windows-amd64
+          path: dist/*
+
+  release-preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/reef-v4'
+    needs: [test, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: reef-windows-amd64
+          path: package/windows
+      - name: Build and package release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package/linux
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o package/linux/reef ./cmd/reef
+          cp LICENSE NOTICE package/linux/
+          cp README.md package/linux/README.txt
+          (cd package/windows && zip -r ../../reef-windows-amd64.zip .)
+          tar -C package/linux -czf reef-linux-amd64.tar.gz .
+          sha256sum reef-windows-amd64.zip reef-linux-amd64.tar.gz > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: reef-v4.0.0-preview
+          target_commitish: ${{ github.event.pull_request.head.sha }}
+          name: Reef 4.0.0 Preview
+          prerelease: true
+          make_latest: false
+          body: |
+            ## Reef 4.0.0 Preview
+
+            Исправлен молчаливый запуск Windows GUI. Перед публикацией проверяются:
+
+            - запуск локального API;
+            - загрузка встроенного интерфейса;
+            - GUI и console Windows-сборки;
+            - Linux-сборка и Docker;
+            - отображение реального состояния адресации.
+
+            `reef.exe` открывает интерфейс автоматически. `reef-console.exe` показывает журнал ошибок. `open-reef.cmd` повторно открывает уже запущенную панель.
+
+            Логические IPv4/IPv6 закреплены за ключом узла, но в этой версии ещё не назначаются системному TUN/Wintun-интерфейсу.
+          files: |
+            reef-windows-amd64.zip
+            reef-linux-amd64.tar.gz
+            SHA256SUMS.txt
