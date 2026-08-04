@@ -41,6 +41,7 @@ func NewAPIServer(app *App, logger *log.Logger) *APIServer {
 func (s *APIServer) Start(ctx context.Context, addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", s.status)
+	mux.HandleFunc("POST /api/autopilot", s.setAutopilot)
 	mux.HandleFunc("GET /api/peers", s.peers)
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/discovered", s.discovered)
@@ -103,9 +104,24 @@ func sameOrigin(origin, host string) bool {
 func (s *APIServer) status(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.app.store.Snapshot()
 	respond(w, map[string]any{
-		"product": ProductName, "protocol": ProtocolVersion, "node_id": s.app.identity.ID(), "public_key": s.app.identity.PublicKeyString(),
-		"config": cfg, "socks": s.app.socks.Address(), "http_proxy": s.app.httpProxy.Address(), "endpoints": s.app.node.advertisedEndpoints(),
+		"product": ProductName, "release": ReleaseVersion, "protocol": ProtocolVersion,
+		"node_id": s.app.identity.ID(), "public_key": s.app.identity.PublicKeyString(),
+		"config": cfg, "autopilot": s.app.autopilot.Status(),
+		"socks": s.app.socks.Address(), "http_proxy": s.app.httpProxy.Address(), "endpoints": s.app.node.advertisedEndpoints(),
 	})
+}
+func (s *APIServer) setAutopilot(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if err := s.app.SetAutopilot(req.Enabled); err != nil {
+		problem(w, 400, err)
+		return
+	}
+	respond(w, s.app.autopilot.Status())
 }
 func (s *APIServer) peers(w http.ResponseWriter, _ *http.Request) {
 	respond(w, s.app.store.Snapshot().Peers)
