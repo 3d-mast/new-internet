@@ -1,0 +1,8 @@
+/bin/
+/dist/
+*.exe
+*.log
+.mycelium/
+.DS_Store
+.idea/
+.vscode/
