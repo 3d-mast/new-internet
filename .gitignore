@@ -1,0 +1,9 @@
+/bin/
+/dist/
+*.exe
+*.log
+.lichen/
+.mycelium/
+.DS_Store
+.idea/
+.vscode/
