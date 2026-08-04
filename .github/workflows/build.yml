@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - run: go build -trimpath -ldflags "-s -w" -o dist/mycelium-one.exe ./cmd/mycelium
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mycelium-one-windows-amd64
+          path: dist/mycelium-one.exe
