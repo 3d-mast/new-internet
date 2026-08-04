@@ -3,9 +3,11 @@ package app
 import "time"
 
 const (
-	ProductName       = "Lichen"
-	ProtocolVersion   = "LICHEN/2"
+	ProductName       = "Rhizome"
+	ReleaseVersion    = "3.0.0"
+	ProtocolVersion   = "LICHEN/2" // Kept stable so Rhizome remains compatible with Lichen peers.
 	InvitePrefix      = "lch1."
+	CurrentConfig     = 3
 	DefaultMeshPort   = 47831
 	DefaultAPIPort    = 47832
 	DefaultSOCKSPort  = 1088
@@ -59,20 +61,32 @@ type TunnelConfig struct {
 }
 
 type Config struct {
+	ConfigVersion   int                   `json:"config_version"`
 	NodeName        string                `json:"node_name"`
 	Listen          string                `json:"listen"`
 	APIListen       string                `json:"api_listen"`
 	SOCKSListen     string                `json:"socks_listen"`
 	HTTPListen      string                `json:"http_listen"`
+	Autopilot       bool                  `json:"autopilot"`
 	ProxyEnabled    bool                  `json:"proxy_enabled"`
 	SystemProxy     bool                  `json:"system_proxy"`
 	OfferExit       bool                  `json:"offer_exit"`
 	SelectedExit    string                `json:"selected_exit"`
 	AutoRelay       bool                  `json:"auto_relay"`
+	ServerMode      bool                  `json:"server_mode"`
 	ManualEndpoints []string              `json:"manual_endpoints"`
 	Peers           map[string]Peer       `json:"peers"`
 	Invitations     map[string]Invitation `json:"invitations"`
 	Tunnels         []TunnelConfig        `json:"tunnels"`
+}
+
+type AutopilotStatus struct {
+	Enabled      bool   `json:"enabled"`
+	Active       bool   `json:"active"`
+	SelectedExit string `json:"selected_exit,omitempty"`
+	Route        string `json:"route,omitempty"`
+	LatencyMS    int64  `json:"latency_ms,omitempty"`
+	Reason       string `json:"reason"`
 }
 
 type DiscoveredNode struct {
