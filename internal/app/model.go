@@ -3,9 +3,9 @@ package app
 import "time"
 
 const (
-	ProductName       = "Rhizome"
-	ReleaseVersion    = "3.0.0"
-	ProtocolVersion   = "LICHEN/2" // Kept stable so Rhizome remains compatible with Lichen peers.
+	ProductName       = "Reef"
+	ReleaseVersion    = "4.0.0"
+	ProtocolVersion   = "LICHEN/2" // Stable wire protocol keeps Reef compatible with Lichen and Rhizome peers.
 	InvitePrefix      = "lch1."
 	CurrentConfig     = 3
 	DefaultMeshPort   = 47831
