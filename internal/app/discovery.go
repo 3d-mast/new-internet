@@ -84,18 +84,19 @@ func (d *Discovery) listen(ctx context.Context) {
 					continue
 				}
 			}
-			d.logger.Printf("discovery read: %v", err)
 			continue
 		}
 		var msg announcement
 		if json.Unmarshal(buf[:n], &msg) != nil || msg.Version != ProtocolVersion || msg.NodeID == d.identity.ID() {
 			continue
 		}
+		if time.Since(time.Unix(msg.Time, 0)) > 2*time.Minute {
+			continue
+		}
 		if msg.NodeID != nodeIDMust(msg.PublicKey) || !verifySignature(msg.PublicKey, msg.signingBytes(), msg.Signature) {
 			continue
 		}
-		host := remote.IP.String()
-		endpoint := net.JoinHostPort(host, strconv.Itoa(msg.Port))
+		endpoint := net.JoinHostPort(remote.IP.String(), strconv.Itoa(msg.Port))
 		d.mu.Lock()
 		d.nodes[msg.NodeID] = DiscoveredNode{ID: msg.NodeID, Name: msg.Name, PublicKey: msg.PublicKey, Endpoint: endpoint, SeenAt: time.Now()}
 		d.mu.Unlock()
@@ -117,12 +118,7 @@ func (d *Discovery) broadcast(ctx context.Context) {
 	defer ticker.Stop()
 	send := func() {
 		cfg := d.store.Snapshot()
-		_, portText, err := net.SplitHostPort(cfg.Listen)
-		if err != nil {
-			return
-		}
-		port, _ := strconv.Atoi(portText)
-		msg := announcement{Version: ProtocolVersion, NodeID: d.identity.ID(), Name: cfg.NodeName, PublicKey: d.identity.PublicKeyString(), Port: port, Time: time.Now().Unix()}
+		msg := announcement{Version: ProtocolVersion, NodeID: d.identity.ID(), Name: cfg.NodeName, PublicKey: d.identity.PublicKeyString(), Port: endpointPort(cfg.Listen), Time: time.Now().Unix()}
 		msg.Signature = d.identity.Sign(msg.signingBytes())
 		raw, _ := json.Marshal(msg)
 		_, _ = conn.Write(raw)

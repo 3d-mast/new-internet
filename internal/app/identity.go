@@ -32,31 +32,42 @@ type Identity struct {
 
 func LoadOrCreateIdentity(path string) (*Identity, error) {
 	if raw, err := os.ReadFile(path); err == nil {
-		var file identityFile
-		if err := json.Unmarshal(raw, &file); err != nil {
-			return nil, err
-		}
-		key, err := base64.RawStdEncoding.DecodeString(file.PrivateKey)
-		if err != nil || len(key) != ed25519.PrivateKeySize {
-			return nil, errors.New("invalid identity key")
-		}
-		return newIdentity(ed25519.PrivateKey(key))
+		return identityFromJSON(raw)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
-	}
-	raw, _ := json.MarshalIndent(identityFile{PrivateKey: base64.RawStdEncoding.EncodeToString(private)}, "", "  ")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	if err := writeIdentity(path, private); err != nil {
 		return nil, err
 	}
 	return newIdentity(private)
+}
+
+func identityFromJSON(raw []byte) (*Identity, error) {
+	var file identityFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return nil, err
+	}
+	key, err := base64.RawStdEncoding.DecodeString(file.PrivateKey)
+	if err != nil || len(key) != ed25519.PrivateKeySize {
+		return nil, errors.New("invalid identity key")
+	}
+	return newIdentity(ed25519.PrivateKey(key))
+}
+
+func writeIdentity(path string, private ed25519.PrivateKey) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	raw, _ := json.MarshalIndent(identityFile{PrivateKey: base64.RawStdEncoding.EncodeToString(private)}, "", "  ")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func newIdentity(private ed25519.PrivateKey) (*Identity, error) {
@@ -101,10 +112,15 @@ func makeCertificate(private ed25519.PrivateKey, public ed25519.PublicKey) (tls.
 	return tls.X509KeyPair(certPEM, keyPEM)
 }
 
-func (i *Identity) ID() string                  { return i.id }
-func (i *Identity) PublicKeyString() string     { return base64.RawStdEncoding.EncodeToString(i.public) }
+func (i *Identity) ID() string                   { return i.id }
+func (i *Identity) PublicKeyString() string      { return base64.RawStdEncoding.EncodeToString(i.public) }
 func (i *Identity) Certificate() tls.Certificate { return i.cert }
-func (i *Identity) Sign(data []byte) string     { return base64.RawStdEncoding.EncodeToString(ed25519.Sign(i.private, data)) }
+func (i *Identity) Sign(data []byte) string {
+	return base64.RawStdEncoding.EncodeToString(ed25519.Sign(i.private, data))
+}
+func (i *Identity) MarshalJSON() ([]byte, error) {
+	return json.Marshal(identityFile{PrivateKey: base64.RawStdEncoding.EncodeToString(i.private)})
+}
 
 func parsePublicKey(encoded string) (ed25519.PublicKey, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(encoded)

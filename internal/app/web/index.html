@@ -3,74 +3,179 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Mycelium One</title>
+  <meta name="theme-color" content="#0b1210">
+  <title>Lichen — живая сеть</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main>
-    <header>
-      <div>
-        <div class="eyebrow">NEW INTERNET / MYCELIUM/1</div>
-        <h1>Сеть жива</h1>
-        <p id="identity">Загрузка узла…</p>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>Lichen</strong><small>живая защищённая сеть</small></div>
       </div>
-      <button id="connectBtn" class="primary">Подключить узел</button>
-    </header>
-
-    <section class="grid metrics">
-      <article><span>Состояние</span><strong class="good">● В сети</strong></article>
-      <article><span>Доверенные узлы</span><strong id="peerCount">0</strong></article>
-      <article><span>Найдено рядом</span><strong id="discoveredCount">0</strong></article>
-      <article><span>Локальный прокси</span><strong id="socksState">выключен</strong></article>
-    </section>
-
-    <section class="grid two">
-      <article class="panel">
-        <h2>Разрешения узла</h2>
-        <label>Имя устройства<input id="nodeName"></label>
-        <label class="toggle"><input id="offerExit" type="checkbox"><span>Разрешить доверенным узлам выходить через мой интернет</span></label>
-        <label class="toggle"><input id="socksEnabled" type="checkbox"><span>Включить локальный SOCKS5 для выхода через другой узел</span></label>
-        <label>Выходной узел<select id="selectedExit"><option value="">Не выбран</option></select></label>
-        <button id="saveSettings">Сохранить</button>
-      </article>
-
-      <article class="panel">
-        <h2>Одноразовое приглашение</h2>
-        <p>Отметь ровно то, что получатель сможет делать через этот узел.</p>
-        <label class="toggle"><input id="allowExit" type="checkbox"><span>Использовать интернет этого узла</span></label>
-        <label class="toggle"><input id="allowLan" type="checkbox"><span>Доступ к локальным TCP-сервисам</span></label>
-        <label class="toggle"><input id="allowRelay" type="checkbox"><span>Использовать узел как ретранслятор</span></label>
-        <button id="createInvite">Создать приглашение на 15 минут</button>
-        <textarea id="inviteToken" readonly placeholder="Здесь появится ключ-приглашение"></textarea>
-      </article>
-    </section>
-
-    <section class="panel">
-      <h2>Узлы сети</h2>
-      <div id="peers" class="cards"></div>
-    </section>
-
-    <section class="panel">
-      <h2>TCP-туннель</h2>
-      <div class="form-row">
-        <select id="tunnelPeer"><option value="">Выбери узел</option></select>
-        <input id="tunnelListen" placeholder="127.0.0.1:8080">
-        <input id="tunnelTarget" placeholder="127.0.0.1:80 на удалённом узле">
-        <button id="addTunnel">Создать</button>
+      <nav>
+        <button class="nav-item active" data-view="network"><span>◉</span>Сеть</button>
+        <button class="nav-item" data-view="peers"><span>⬡</span>Узлы</button>
+        <button class="nav-item" data-view="tunnels"><span>⇄</span>Туннели</button>
+        <button class="nav-item" data-view="security"><span>◇</span>Безопасность</button>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="protocolBadge">LICHEN/2</span>
+        <small>Автор: Алексей Прокопчук</small>
       </div>
-      <div id="tunnels"></div>
-    </section>
-  </main>
+    </aside>
 
-  <dialog id="connectDialog">
-    <form method="dialog">
-      <h2>Подключить узел</h2>
-      <p>Вставь одноразовое приглашение. Подмена ключа будет обнаружена автоматически.</p>
-      <textarea id="joinToken" placeholder="myc1.…"></textarea>
-      <div class="actions"><button value="cancel">Отмена</button><button id="joinBtn" value="default" class="primary">Подключить</button></div>
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="viewEyebrow">СОСТОЯНИЕ СЕТИ</p>
+          <h1 id="viewTitle">Ваша сеть</h1>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" id="inviteOpen">+ Пригласить</button>
+          <button class="primary" id="joinOpen">Подключить узел</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-network">
+        <article class="hero" id="heroCard">
+          <div>
+            <div class="status-line"><span class="pulse" id="mainPulse"></span><span id="mainStatus">Lichen запущен</span></div>
+            <h2 id="heroTitle">Прямое защищённое соединение</h2>
+            <p id="heroText">Выберите выходной узел и включите сеть одной кнопкой. Lichen сам попробует прямой путь, затем безопасный relay.</p>
+          </div>
+          <button id="networkToggle" class="power-button" aria-pressed="false"><span class="power-icon">⏻</span><span id="powerText">Включить сеть</span></button>
+        </article>
+
+        <div class="metric-grid">
+          <article class="metric"><span>Узлы онлайн</span><strong id="onlineCount">0</strong><small id="peerCount">из 0 доверенных</small></article>
+          <article class="metric"><span>Лучший маршрут</span><strong id="bestRoute">—</strong><small id="bestLatency">нет измерений</small></article>
+          <article class="metric"><span>Найдено рядом</span><strong id="discoveredCount">0</strong><small>локальное обнаружение</small></article>
+          <article class="metric"><span>Прокси</span><strong id="proxyState">выключен</strong><small id="proxyAddress">SOCKS5 + HTTP</small></article>
+        </div>
+
+        <div class="content-grid two-thirds">
+          <article class="panel route-panel">
+            <div class="panel-head"><div><p class="eyebrow">МАРШРУТ</p><h3>Выход в интернет</h3></div><span class="chip" id="routeChip">не выбран</span></div>
+            <label class="field"><span>Выходной узел</span><select id="selectedExit"><option value="">Выберите узел</option></select></label>
+            <div class="switch-row"><div><strong>Системный режим Windows</strong><p>Автоматически направляет браузеры и приложения через локальный HTTP-прокси.</p></div><label class="switch"><input type="checkbox" id="systemProxy"><span></span></label></div>
+            <div class="switch-row"><div><strong>Автоматический relay</strong><p>Если прямой путь недоступен, используется доверенный промежуточный узел с вложенным TLS.</p></div><label class="switch"><input type="checkbox" id="autoRelay"><span></span></label></div>
+            <button class="secondary wide" id="saveNetwork">Сохранить маршрут</button>
+          </article>
+
+          <article class="panel events-panel">
+            <div class="panel-head"><div><p class="eyebrow">ЖУРНАЛ</p><h3>Что происходит</h3></div><button class="text-button" id="refreshBtn">Обновить</button></div>
+            <div id="events" class="event-list"><div class="empty">Событий пока нет</div></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-peers">
+        <div class="section-toolbar">
+          <div><h2>Доверенные узлы</h2><p>Каждому узлу выдаются отдельные права. Подключение само по себе ничего не разрешает.</p></div>
+          <button class="secondary" id="probeAll">Проверить все</button>
+        </div>
+        <div id="peerCards" class="peer-grid"></div>
+        <article class="panel discovered-panel">
+          <div class="panel-head"><div><p class="eyebrow">РЯДОМ</p><h3>Обнаруженные устройства</h3></div><span class="chip" id="nearbyCount">0</span></div>
+          <div id="discoveredList" class="compact-list"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-tunnels">
+        <div class="section-toolbar"><div><h2>Локальные TCP-туннели</h2><p>Открывайте удалённый веб-интерфейс, SSH, NAS или другой TCP-сервис как локальный порт.</p></div></div>
+        <article class="panel tunnel-builder">
+          <div class="form-grid">
+            <label class="field"><span>Название</span><input id="tunnelName" placeholder="Например: NAS дома"></label>
+            <label class="field"><span>Удалённый узел</span><select id="tunnelPeer"><option value="">Выберите узел</option></select></label>
+            <label class="field"><span>Локальный адрес</span><input id="tunnelListen" value="127.0.0.1:8080"></label>
+            <label class="field"><span>Цель на удалённой стороне</span><input id="tunnelTarget" placeholder="192.168.1.10:80"></label>
+          </div>
+          <button class="primary" id="addTunnel">Создать туннель</button>
+        </article>
+        <div id="tunnelList" class="stack"></div>
+      </section>
+
+      <section class="view" id="view-security">
+        <div class="content-grid two">
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">УСТРОЙСТВО</p><h3>Локальные настройки</h3></div></div>
+            <label class="field"><span>Имя узла</span><input id="nodeName"></label>
+            <label class="field"><span>Публичные адреса вручную</span><textarea id="manualEndpoints" placeholder="vpn.example.org:47831&#10;203.0.113.10:47831"></textarea><small>По одному адресу host:port на строку. Нужны только при ручном пробросе порта.</small></label>
+            <div class="switch-row"><div><strong>Предоставлять интернет</strong><p>Разрешение всё равно выдаётся отдельно каждому узлу.</p></div><label class="switch"><input type="checkbox" id="offerExit"><span></span></label></div>
+            <button class="secondary wide" id="saveSecurity">Сохранить</button>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head"><div><p class="eyebrow">РЕЗЕРВНАЯ КОПИЯ</p><h3>Зашифрованный профиль</h3></div></div>
+            <p>В профиль входят ключ устройства, доверенные узлы и настройки. Шифрование AES‑256‑GCM, ключ выводится из пароля.</p>
+            <label class="field"><span>Пароль резервной копии</span><input id="backupPassword" type="password" autocomplete="new-password" minlength="8"></label>
+            <div class="button-row"><button class="secondary" id="exportProfile">Экспортировать</button><button class="ghost" id="importProfileOpen">Импортировать</button></div>
+            <textarea id="profileOutput" readonly placeholder="Здесь появится зашифрованный профиль"></textarea>
+          </article>
+        </div>
+
+        <article class="panel diagnostics-panel">
+          <div class="panel-head"><div><p class="eyebrow">САМОПРОВЕРКА</p><h3>Диагностика Lichen</h3></div><button class="secondary" id="runDiagnostics">Запустить проверку</button></div>
+          <div id="diagnostics" class="diagnostics"><div class="empty">Нажмите «Запустить проверку»</div></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="inviteDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><div><p class="eyebrow">ОДНОРАЗОВЫЙ ДОСТУП</p><h2>Пригласить узел</h2></div><button class="icon-button" value="cancel">×</button></div>
+      <p>Выдайте только необходимые возможности. Приглашение автоматически сгорит после использования.</p>
+      <div class="permission-list">
+        <label><input type="checkbox" id="allowExit"><span><strong>Выход в интернет</strong><small>Получатель сможет использовать ваш внешний IP.</small></span></label>
+        <label><input type="checkbox" id="allowLan"><span><strong>Локальные сервисы</strong><small>Доступ к указанным TCP-адресам вашей локальной сети.</small></span></label>
+        <label><input type="checkbox" id="allowRelay"><span><strong>Relay</strong><small>Передача сквозного зашифрованного трафика к другим узлам.</small></span></label>
+      </div>
+      <label class="field"><span>Срок действия</span><select id="inviteTTL"><option value="15">15 минут</option><option value="60">1 час</option><option value="360">6 часов</option><option value="1440">24 часа</option></select></label>
+      <button type="button" class="primary wide" id="createInvite">Создать и скопировать</button>
+      <textarea id="inviteToken" readonly placeholder="Ключ приглашения появится здесь"></textarea>
+      <div id="inviteHistory" class="compact-list"></div>
     </form>
   </dialog>
-  <div id="toast"></div>
+
+  <dialog id="joinDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><div><p class="eyebrow">ДОВЕРИЕ ПО КЛЮЧУ</p><h2>Подключить узел</h2></div><button class="icon-button" value="cancel">×</button></div>
+      <p>Вставьте приглашение `lch1.…`. Подмена личности или подписи будет отвергнута автоматически.</p>
+      <textarea id="joinToken" placeholder="lch1.…"></textarea>
+      <button type="button" class="primary wide" id="joinBtn">Проверить и подключить</button>
+    </form>
+  </dialog>
+
+  <dialog id="peerDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><div><p class="eyebrow">КОНТРОЛЬ ДОСТУПА</p><h2 id="peerDialogTitle">Настройки узла</h2></div><button class="icon-button" value="cancel">×</button></div>
+      <input id="editPeerID" type="hidden">
+      <label class="field"><span>Имя</span><input id="editPeerName"></label>
+      <label class="field"><span>Адреса подключения</span><textarea id="editPeerEndpoints"></textarea></label>
+      <p class="subheading">Что этот узел может делать через вас</p>
+      <div class="permission-list compact">
+        <label><input type="checkbox" id="editAllowExit"><span><strong>Использовать интернет</strong></span></label>
+        <label><input type="checkbox" id="editAllowLan"><span><strong>Открывать локальные TCP-сервисы</strong></span></label>
+        <label><input type="checkbox" id="editAllowRelay"><span><strong>Использовать relay</strong></span></label>
+      </div>
+      <div class="button-row"><button type="button" class="danger" id="removePeer">Отозвать доверие</button><button type="button" class="primary" id="savePeer">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="importDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><div><p class="eyebrow">ВОССТАНОВЛЕНИЕ</p><h2>Импорт профиля</h2></div><button class="icon-button" value="cancel">×</button></div>
+      <label class="field"><span>Зашифрованный профиль</span><textarea id="importProfileText"></textarea></label>
+      <label class="field"><span>Пароль</span><input id="importPassword" type="password"></label>
+      <p class="warning-box">Импорт заменит текущую идентичность и настройки. После операции потребуется перезапуск программы.</p>
+      <button type="button" class="danger wide" id="importProfile">Импортировать профиль</button>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status"></div>
   <script src="/app.js"></script>
 </body>
 </html>

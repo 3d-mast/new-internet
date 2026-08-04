@@ -1,35 +1,48 @@
 package app
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestNodeIDStable(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
+func TestIdentityPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "identity.json")
+	first, err := LoadOrCreateIdentity(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := nodeID(pub)
-	second := nodeID(pub)
-	if first == "" || first != second {
-		t.Fatalf("unstable node id: %q %q", first, second)
+	second, err := LoadOrCreateIdentity(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID() != second.ID() {
+		t.Fatalf("identity changed: %s != %s", first.ID(), second.ID())
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+		t.Fatalf("identity file missing: %v", err)
 	}
 }
 
-func TestInviteSignature(t *testing.T) {
-	_, private, err := ed25519.GenerateKey(rand.Reader)
+func TestInviteRoundTrip(t *testing.T) {
+	identity, err := LoadOrCreateIdentity(filepath.Join(t.TempDir(), "identity.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity, err := newIdentity(private)
+	store, err := LoadStore(filepath.Join(t.TempDir(), "config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := invitePayload{Version: ProtocolVersion, NodeID: identity.ID(), PublicKey: identity.PublicKeyString()}
-	payload.Signature = identity.Sign(payload.signingBytes())
-	if !verifySignature(payload.PublicKey, payload.signingBytes(), payload.Signature) {
-		t.Fatal("signature rejected")
+	node := NewNode(identity, store, discardLogger(), NewEventLog(50))
+	token, err := node.CreateInvite(Permissions{UseExit: true, Relay: true}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := decodeInvite(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.NodeID != identity.ID() || !payload.Permissions.UseExit || !payload.Permissions.Relay {
+		t.Fatalf("unexpected invite: %+v", payload)
 	}
 }

@@ -22,6 +22,10 @@ type Hello struct {
 	Signature  string `json:"signature"`
 }
 
+type BackhaulCommand struct {
+	Open bool `json:"open"`
+}
+
 type Response struct {
 	OK          bool        `json:"ok"`
 	Error       string      `json:"error,omitempty"`
@@ -29,6 +33,7 @@ type Response struct {
 	Name        string      `json:"name,omitempty"`
 	PublicKey   string      `json:"public_key,omitempty"`
 	Permissions Permissions `json:"permissions,omitempty"`
+	Route       string      `json:"route,omitempty"`
 }
 
 func (h Hello) signingBytes() []byte {

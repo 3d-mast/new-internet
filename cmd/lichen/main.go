@@ -20,20 +20,17 @@ func main() {
 	flag.BoolVar(&noBrowser, "no-browser", false, "do not open the local web interface")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "mycelium: ", log.LstdFlags|log.Lmicroseconds)
+	logger := log.New(os.Stdout, "lichen: ", log.LstdFlags|log.Lmicroseconds)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-
 	instance, err := app.New(dataDir, logger)
 	if err != nil {
 		logger.Fatalf("initialization failed: %v", err)
 	}
-
 	if err := instance.Start(ctx, !noBrowser); err != nil {
 		logger.Fatalf("startup failed: %v", err)
 	}
-
-	fmt.Printf("MYCELIUM/1 node %s is running at %s\n", instance.NodeID(), instance.UIURL())
+	fmt.Printf("%s node %s is running at %s\n", app.ProtocolVersion, instance.NodeID(), instance.UIURL())
 	<-ctx.Done()
 	instance.Close()
 }
@@ -41,7 +38,7 @@ func main() {
 func defaultDataDir() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
-		return ".mycelium"
+		return ".lichen"
 	}
-	return filepath.Join(dir, "MyceliumOne")
+	return filepath.Join(dir, "Lichen")
 }

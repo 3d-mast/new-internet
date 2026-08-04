@@ -17,12 +17,13 @@ type SOCKSServer struct {
 	node   *Node
 	store  *Store
 	logger *log.Logger
+	events *EventLog
 	mu     sync.Mutex
 	ln     net.Listener
 }
 
-func NewSOCKSServer(node *Node, store *Store, logger *log.Logger) *SOCKSServer {
-	return &SOCKSServer{node: node, store: store, logger: logger}
+func NewSOCKSServer(node *Node, store *Store, logger *log.Logger, events *EventLog) *SOCKSServer {
+	return &SOCKSServer{node: node, store: store, logger: logger, events: events}
 }
 
 func (s *SOCKSServer) Start(ctx context.Context) error {
@@ -31,8 +32,7 @@ func (s *SOCKSServer) Start(ctx context.Context) error {
 	if s.ln != nil {
 		return nil
 	}
-	cfg := s.store.Snapshot()
-	ln, err := net.Listen("tcp", cfg.SOCKSListen)
+	ln, err := net.Listen("tcp", s.store.Snapshot().SOCKSListen)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,8 @@ func (s *SOCKSServer) handle(conn net.Conn) {
 		return
 	}
 	cfg := s.store.Snapshot()
-	if cfg.SelectedExit == "" {
+	peer, ok := cfg.Peers[cfg.SelectedExit]
+	if cfg.SelectedExit == "" || !ok || !peer.Capabilities.UseExit {
 		_ = socksReply(conn, 0x01)
 		return
 	}
@@ -152,3 +153,4 @@ func (s *SOCKSServer) Address() string {
 	}
 	return fmt.Sprintf("disabled (%s)", s.store.Snapshot().SOCKSListen)
 }
+func (s *SOCKSServer) Running() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.ln != nil }

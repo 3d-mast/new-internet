@@ -29,8 +29,8 @@ jobs:
           go-version: '1.23.x'
           cache: true
       - run: go test ./...
-      - run: go build -trimpath -ldflags "-s -w" -o dist/mycelium-one.exe ./cmd/mycelium
+      - run: go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/lichen.exe ./cmd/lichen
       - uses: actions/upload-artifact@v4
         with:
-          name: mycelium-one-windows-amd64
-          path: dist/mycelium-one.exe
+          name: lichen-windows-amd64
+          path: dist/lichen.exe

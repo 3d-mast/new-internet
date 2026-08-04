@@ -6,23 +6,26 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 type runningTunnel struct {
-	config TunnelConfig
-	ln     net.Listener
-	err    string
+	config      TunnelConfig
+	ln          net.Listener
+	err         string
+	connections atomic.Int64
 }
 
 type TunnelManager struct {
 	node   *Node
 	logger *log.Logger
+	events *EventLog
 	mu     sync.RWMutex
 	items  map[string]*runningTunnel
 }
 
-func NewTunnelManager(node *Node, logger *log.Logger) *TunnelManager {
-	return &TunnelManager{node: node, logger: logger, items: make(map[string]*runningTunnel)}
+func NewTunnelManager(node *Node, logger *log.Logger, events *EventLog) *TunnelManager {
+	return &TunnelManager{node: node, logger: logger, events: events, items: make(map[string]*runningTunnel)}
 }
 
 func (m *TunnelManager) Add(ctx context.Context, cfg TunnelConfig) error {
@@ -49,9 +52,11 @@ func (m *TunnelManager) Add(ctx context.Context, cfg TunnelConfig) error {
 	}
 	m.mu.Lock()
 	item.ln = ln
+	item.err = ""
 	m.mu.Unlock()
 	go func() { <-ctx.Done(); m.Remove(cfg.ID) }()
 	go m.acceptLoop(item)
+	m.events.Add("success", "tunnel", "TCP-туннель запущен: "+cfg.Listen+" → "+cfg.Target, cfg.PeerID)
 	return nil
 }
 
@@ -64,10 +69,12 @@ func (m *TunnelManager) acceptLoop(item *runningTunnel) {
 			}
 			return
 		}
+		item.connections.Add(1)
 		go func() {
 			defer conn.Close()
 			upstream, err := m.node.OpenStream(item.config.PeerID, "tunnel", item.config.Target)
 			if err != nil {
+				m.logger.Printf("tunnel %s upstream: %v", item.config.ID, err)
 				return
 			}
 			defer upstream.Close()
@@ -92,7 +99,7 @@ func (m *TunnelManager) Status() []TunnelStatus {
 	defer m.mu.RUnlock()
 	out := make([]TunnelStatus, 0, len(m.items))
 	for _, item := range m.items {
-		out = append(out, TunnelStatus{TunnelConfig: item.config, Active: item.ln != nil, Error: item.err})
+		out = append(out, TunnelStatus{TunnelConfig: item.config, Active: item.ln != nil, Connections: item.connections.Load(), Error: item.err})
 	}
 	return out
 }
