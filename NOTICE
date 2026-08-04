@@ -1,0 +1,20 @@
+Rhizome / Lichen Network Protocol
+Copyright 2026 Alexey Prokopchuk (Алексей Прокопчук)
+
+Original project creator, concept author, and progenitor:
+Alexey Prokopchuk (Алексей Прокопчук).
+
+Release lineage:
+- Mycelium One / MYCELIUM/1 — initial experimental implementation.
+- Lichen / LICHEN/2 — encrypted relay, NAT backhaul and desktop GUI.
+- Rhizome 3 — zero-touch autopilot, safe failover and one-command server mode.
+
+The stable LICHEN/2 wire protocol is retained in Rhizome 3 to avoid breaking
+interoperability with previously deployed Lichen nodes.
+
+This product includes software originally developed for the new-internet project.
+Redistributions and derivative works must preserve a readable copy of this
+attribution notice in accordance with Section 4(d) of the Apache License 2.0.
+
+The contents of this NOTICE file are for attribution and informational purposes
+and do not modify the terms of the Apache License 2.0.

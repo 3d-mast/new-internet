@@ -1,0 +1,80 @@
+name: release-preview
+
+on:
+  push:
+    branches:
+      - agent/rhizome-v3
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rhizome-v3-preview-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - name: Verify source
+        run: |
+          go test ./...
+          go vet ./...
+          node --check internal/app/web/app.js
+          node --check internal/app/web/rhizome.js
+
+      - name: Build release packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist package/windows package/linux
+
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags '-s -w -H=windowsgui' -o package/windows/rhizome.exe ./cmd/rhizome
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o package/linux/rhizome ./cmd/rhizome
+
+          cp README.md LICENSE NOTICE package/windows/
+          cp README.md LICENSE NOTICE package/linux/
+
+          chmod +x package/linux/rhizome
+          (cd package/windows && zip -9 -r ../../dist/rhizome-windows-amd64.zip .)
+          tar -C package/linux -czf dist/rhizome-linux-amd64.tar.gz .
+          (cd dist && sha256sum rhizome-windows-amd64.zip rhizome-linux-amd64.tar.gz > SHA256SUMS.txt)
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: rhizome-v3.0.0-preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG" --force
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Rhizome 3.0.0 Preview" \
+              --notes-file docs/releases/rhizome-3.0.0.md \
+              --prerelease
+          else
+            gh release create "$TAG" \
+              --title "Rhizome 3.0.0 Preview" \
+              --notes-file docs/releases/rhizome-3.0.0.md \
+              --prerelease
+          fi
+
+          gh release upload "$TAG" \
+            dist/rhizome-windows-amd64.zip \
+            dist/rhizome-linux-amd64.tar.gz \
+            dist/SHA256SUMS.txt \
+            --clobber

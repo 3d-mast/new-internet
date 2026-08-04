@@ -1,0 +1,40 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+      - run: node --check internal/app/web/app.js
+      - run: node --check internal/app/web/rhizome.js
+      - run: go build -trimpath -ldflags "-s -w" -o dist/rhizome-linux-amd64 ./cmd/rhizome
+      - run: docker build -t rhizome-ci .
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go test ./...
+      - run: go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/rhizome.exe ./cmd/rhizome
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rhizome-windows-amd64
+          path: dist/rhizome.exe

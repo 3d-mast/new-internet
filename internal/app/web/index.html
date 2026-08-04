@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07120d">
+  <title>Rhizome — сеть сама находит путь</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/rhizome.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark rhizome-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>Rhizome</strong><small>самоорганизующаяся сеть</small></div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="network"><span>◉</span>Сеть</button>
+        <button class="nav-item" data-view="peers"><span>⬡</span>Узлы</button>
+        <button class="nav-item" data-view="tunnels"><span>⇄</span>Сервисы</button>
+        <button class="nav-item" data-view="security"><span>◇</span>Безопасность</button>
+      </nav>
+      <div class="sidebar-foot"><span id="protocolBadge">LICHEN/2</span><small>Rhizome 3 · Алексей Прокопчук</small></div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow" id="viewEyebrow">АВТОПИЛОТ</p><h1 id="viewTitle">Сеть без настроек</h1></div>
+        <div class="top-actions"><button class="ghost" id="inviteOpen">Пригласить</button><button class="primary" id="joinOpen">Ввести приглашение</button></div>
+      </header>
+
+      <section class="view active" id="view-network">
+        <article class="hero rhizome-hero" id="heroCard">
+          <div>
+            <div class="status-line"><span class="pulse" id="mainPulse"></span><span id="mainStatus">Запуск узла…</span></div>
+            <h2 id="heroTitle">Rhizome сам построит маршрут</h2>
+            <p id="heroText">Никаких адресов, прокси и ручного выбора. После обмена приглашением сеть сама выберет прямой путь, relay или обратный канал через NAT.</p>
+            <div class="autopilot-note" id="autopilotReason">Проверка доступных путей…</div>
+          </div>
+          <button id="networkToggle" class="power-button on" aria-pressed="true"><span class="power-icon">⏻</span><span id="powerText">Сеть работает</span></button>
+        </article>
+
+        <div class="metric-grid">
+          <article class="metric"><span>Узлы онлайн</span><strong id="onlineCount">0</strong><small id="peerCount">из 0 доверенных</small></article>
+          <article class="metric"><span>Текущий путь</span><strong id="bestRoute">поиск</strong><small id="bestLatency">автоматически</small></article>
+          <article class="metric"><span>Найдено рядом</span><strong id="discoveredCount">0</strong><small>без сканирования вручную</small></article>
+          <article class="metric"><span>Защита приложений</span><strong id="proxyState">ожидание</strong><small id="proxyAddress">включится при готовом маршруте</small></article>
+        </div>
+
+        <div class="content-grid two-thirds">
+          <article class="panel route-panel">
+            <div class="panel-head"><div><p class="eyebrow">АВТОМАТИЧЕСКИЙ МАРШРУТ</p><h3>Что делает Rhizome</h3></div><span class="chip" id="routeChip">поиск</span></div>
+            <ol class="autopilot-steps">
+              <li><span>1</span><div><strong>Проверяет прямое соединение</strong><small>Выбирает самый быстрый подтверждённый endpoint.</small></div></li>
+              <li><span>2</span><div><strong>Обходит NAT и обрывы</strong><small>Использует вложенный TLS через доверенный relay или backhaul.</small></div></li>
+              <li><span>3</span><div><strong>Сам переключает выход</strong><small>При отказе меняет маршрут и не оставляет систему с мёртвым прокси.</small></div></li>
+            </ol>
+            <details class="advanced-settings">
+              <summary>Расширенные настройки</summary>
+              <label class="field"><span>Ручной выходной узел</span><select id="selectedExit"><option value="">Автоматически</option></select></label>
+              <div class="switch-row"><div><strong>Системный прокси Windows</strong><p>В автопилоте включается только при рабочем выходе.</p></div><label class="switch"><input type="checkbox" id="systemProxy"><span></span></label></div>
+              <div class="switch-row"><div><strong>Автоматический relay</strong><p>Резервный путь с вложенным TLS.</p></div><label class="switch"><input type="checkbox" id="autoRelay"><span></span></label></div>
+              <button class="secondary wide" id="saveNetwork">Применить вручную</button>
+            </details>
+          </article>
+          <article class="panel events-panel"><div class="panel-head"><div><p class="eyebrow">ЖУРНАЛ</p><h3>Сеть в реальном времени</h3></div><button class="text-button" id="refreshBtn">Обновить</button></div><div id="events" class="event-list"><div class="empty">Событий пока нет</div></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-peers">
+        <div class="section-toolbar"><div><h2>Доверенные узлы</h2><p>Один раз обменяйтесь приглашением. Дальше адреса и маршруты обслуживаются автоматически.</p></div><button class="secondary" id="probeAll">Проверить все</button></div>
+        <div id="peerCards" class="peer-grid"></div>
+        <article class="panel discovered-panel"><div class="panel-head"><div><p class="eyebrow">РЯДОМ</p><h3>Обнаруженные устройства</h3></div><span class="chip" id="nearbyCount">0</span></div><div id="discoveredList" class="compact-list"></div></article>
+      </section>
+
+      <section class="view" id="view-tunnels">
+        <div class="section-toolbar"><div><h2>Удалённые сервисы</h2><p>NAS, SSH, веб-панель или другой TCP-сервис открывается как локальный порт.</p></div></div>
+        <article class="panel tunnel-builder"><div class="form-grid">
+          <label class="field"><span>Название</span><input id="tunnelName" placeholder="NAS дома"></label>
+          <label class="field"><span>Удалённый узел</span><select id="tunnelPeer"><option value="">Выберите узел</option></select></label>
+          <label class="field"><span>Локальный адрес</span><input id="tunnelListen" value="127.0.0.1:8080"></label>
+          <label class="field"><span>Удалённая цель</span><input id="tunnelTarget" placeholder="192.168.1.10:80"></label>
+        </div><button class="primary" id="addTunnel">Открыть сервис</button></article>
+        <div id="tunnelList" class="stack"></div>
+      </section>
+
+      <section class="view" id="view-security">
+        <div class="content-grid two">
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">УСТРОЙСТВО</p><h3>Локальная политика</h3></div></div>
+            <label class="field"><span>Имя устройства</span><input id="nodeName"></label>
+            <div class="switch-row"><div><strong>Предоставлять интернет</strong><p>По умолчанию выключено. Включайте осознанно для доверенных узлов.</p></div><label class="switch"><input type="checkbox" id="offerExit"><span></span></label></div>
+            <details class="advanced-settings"><summary>Публичные endpoints вручную</summary><label class="field"><textarea id="manualEndpoints" placeholder="server.example.org:47831"></textarea></label></details>
+            <button class="secondary wide" id="saveSecurity">Сохранить политику</button>
+          </article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">РЕЗЕРВНАЯ КОПИЯ</p><h3>Зашифрованный профиль</h3></div></div>
+            <p>Ключ устройства, доверие и настройки шифруются AES‑256‑GCM.</p>
+            <label class="field"><span>Пароль</span><input id="backupPassword" type="password" autocomplete="new-password" minlength="8"></label>
+            <div class="button-row"><button class="secondary" id="exportProfile">Экспортировать</button><button class="ghost" id="importProfileOpen">Импортировать</button></div>
+            <textarea id="profileOutput" readonly placeholder="Здесь появится зашифрованный профиль"></textarea>
+          </article>
+        </div>
+        <article class="panel diagnostics-panel"><div class="panel-head"><div><p class="eyebrow">САМОПРОВЕРКА</p><h3>Диагностика Rhizome</h3></div><button class="secondary" id="runDiagnostics">Запустить</button></div><div id="diagnostics" class="diagnostics"><div class="empty">Проверка ещё не запускалась</div></div></article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="inviteDialog"><form method="dialog" class="dialog-card">
+    <div class="dialog-head"><div><p class="eyebrow">ОДНА КНОПКА</p><h2>Пригласить устройство</h2></div><button class="icon-button" value="cancel">×</button></div>
+    <p>Выберите возможности один раз. После подключения Rhizome всё настроит самостоятельно.</p>
+    <div class="permission-list">
+      <label><input type="checkbox" id="allowExit"><span><strong>Выход в интернет</strong><small>Получатель сможет использовать ваш внешний IP.</small></span></label>
+      <label><input type="checkbox" id="allowLan"><span><strong>Локальные сервисы</strong><small>Доступ к разрешённым TCP-сервисам.</small></span></label>
+      <label><input type="checkbox" id="allowRelay" checked><span><strong>Самовосстановление через relay</strong><small>Передача непрозрачного зашифрованного потока.</small></span></label>
+    </div>
+    <label class="field"><span>Срок</span><select id="inviteTTL"><option value="15">15 минут</option><option value="60">1 час</option><option value="360">6 часов</option><option value="1440">24 часа</option></select></label>
+    <button type="button" class="primary wide" id="createInvite">Создать и скопировать</button><textarea id="inviteToken" readonly></textarea><div id="inviteHistory" class="compact-list"></div>
+  </form></dialog>
+
+  <dialog id="joinDialog"><form method="dialog" class="dialog-card">
+    <div class="dialog-head"><div><p class="eyebrow">ПОДКЛЮЧЕНИЕ</p><h2>Вставьте приглашение</h2></div><button class="icon-button" value="cancel">×</button></div>
+    <p>Ключ, подпись и личность узла будут проверены автоматически.</p><textarea id="joinToken" placeholder="lch1.…"></textarea><button type="button" class="primary wide" id="joinBtn">Подключить</button>
+  </form></dialog>
+
+  <dialog id="peerDialog"><form method="dialog" class="dialog-card">
+    <div class="dialog-head"><div><p class="eyebrow">ДОСТУП</p><h2 id="peerDialogTitle">Узел</h2></div><button class="icon-button" value="cancel">×</button></div>
+    <input id="editPeerID" type="hidden"><label class="field"><span>Имя</span><input id="editPeerName"></label><label class="field"><span>Endpoints</span><textarea id="editPeerEndpoints"></textarea></label>
+    <div class="permission-list compact"><label><input type="checkbox" id="editAllowExit"><span><strong>Интернет</strong></span></label><label><input type="checkbox" id="editAllowLan"><span><strong>LAN</strong></span></label><label><input type="checkbox" id="editAllowRelay"><span><strong>Relay</strong></span></label></div>
+    <div class="button-row"><button type="button" class="danger" id="removePeer">Отозвать доверие</button><button type="button" class="primary" id="savePeer">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="importDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><div><p class="eyebrow">ВОССТАНОВЛЕНИЕ</p><h2>Импорт профиля</h2></div><button class="icon-button" value="cancel">×</button></div><label class="field"><span>Профиль</span><textarea id="importProfileText"></textarea></label><label class="field"><span>Пароль</span><input id="importPassword" type="password"></label><p class="warning-box">Текущая идентичность будет заменена.</p><button type="button" class="danger wide" id="importProfile">Импортировать</button></form></dialog>
+
+  <div id="toast" role="status"></div>
+  <script src="/app.js"></script>
+  <script src="/rhizome.js"></script>
+</body>
+</html>
