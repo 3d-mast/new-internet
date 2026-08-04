@@ -19,7 +19,10 @@ jobs:
           cache: true
       - run: go test ./...
       - run: go vet ./...
+      - run: node --check internal/app/web/app.js
+      - run: node --check internal/app/web/rhizome.js
       - run: go build -trimpath -ldflags "-s -w" -o dist/rhizome-linux-amd64 ./cmd/rhizome
+      - run: docker build -t rhizome-ci .
 
   windows:
     runs-on: windows-latest
