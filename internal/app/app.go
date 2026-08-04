@@ -26,6 +26,7 @@ type App struct {
 	httpProxy    *HTTPProxy
 	tunnels      *TunnelManager
 	api          *APIServer
+	autopilot    *Autopilot
 	ctx          context.Context
 	cancel       context.CancelFunc
 }
@@ -47,6 +48,7 @@ func New(dataDir string, logger *log.Logger) (*App, error) {
 	instance.httpProxy = NewHTTPProxy(node, store, logger)
 	instance.tunnels = NewTunnelManager(node, logger, events)
 	instance.api = NewAPIServer(instance, logger)
+	instance.autopilot = NewAutopilot(instance)
 	return instance, nil
 }
 
@@ -57,7 +59,9 @@ func (a *App) Start(parent context.Context, openBrowser bool) error {
 		return fmt.Errorf("mesh listener: %w", err)
 	}
 	cfg := a.store.Snapshot()
-	if cfg.ProxyEnabled {
+	// Manual mode preserves the exact Lichen behaviour. Autopilot mode waits for
+	// a verified healthy exit before touching the operating-system proxy.
+	if !cfg.Autopilot && cfg.ProxyEnabled {
 		if err := a.startProxies(); err != nil {
 			a.events.Add("error", "proxy", "Прокси не запущен: "+err.Error(), "")
 		}
@@ -75,10 +79,11 @@ func (a *App) Start(parent context.Context, openBrowser bool) error {
 	if err := a.api.Start(ctx, cfg.APIListen); err != nil {
 		return fmt.Errorf("API: %w", err)
 	}
+	a.autopilot.Start(ctx)
 	if openBrowser {
 		go func() { time.Sleep(350 * time.Millisecond); _ = openURL(a.UIURL()) }()
 	}
-	a.events.Add("success", "startup", "Lichen готов к работе", "")
+	a.events.Add("success", "startup", "Rhizome готов: маршруты и восстановление связи работают автоматически", "")
 	return nil
 }
 
@@ -162,6 +167,38 @@ func (a *App) ApplySettings(req SettingsRequest) error {
 	return nil
 }
 
+// PrepareServerMode makes the same binary useful on a clean VPS without an
+// interactive setup wizard. A public IP already present on a VPS interface is
+// automatically advertised by the node; explicit endpoints are optional.
+func (a *App) PrepareServerMode(publicEndpoints []string) error {
+	clean := make([]string, 0, len(publicEndpoints))
+	for _, endpoint := range publicEndpoints {
+		endpoint = strings.TrimSpace(endpoint)
+		if endpoint == "" {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(endpoint); err != nil {
+			return fmt.Errorf("invalid public endpoint %q", endpoint)
+		}
+		clean = append(clean, endpoint)
+	}
+	return a.store.Update(func(cfg *Config) error {
+		cfg.ServerMode = true
+		cfg.Autopilot = false
+		cfg.AutoRelay = true
+		cfg.OfferExit = true
+		cfg.ProxyEnabled = false
+		cfg.SystemProxy = false
+		cfg.SelectedExit = ""
+		cfg.ManualEndpoints = cleanStrings(append(clean, cfg.ManualEndpoints...))
+		return nil
+	})
+}
+
+func (a *App) CreateServerInvite(ttl time.Duration) (string, error) {
+	return a.node.CreateInvite(Permissions{UseExit: true, AccessLAN: false, Relay: true}, ttl)
+}
+
 func (a *App) Close() {
 	if a.cancel != nil {
 		a.cancel()
@@ -179,11 +216,13 @@ func (a *App) UIURL() string  { return "http://" + a.store.Snapshot().APIListen 
 
 func (a *App) Diagnostics() []DiagnosticItem {
 	cfg := a.store.Snapshot()
+	auto := a.autopilot.Status()
 	items := []DiagnosticItem{
 		{Name: "Идентичность Ed25519", OK: a.identity.ID() != "", Details: a.identity.ID()},
 		{Name: "Сетевой слушатель", OK: a.node.listener != nil, Details: cfg.Listen},
 		{Name: "Локальная панель", OK: a.api.server != nil, Details: cfg.APIListen},
 		{Name: "Каталог данных", OK: writableDirectory(a.dataDir), Details: a.dataDir},
+		{Name: "Автопилот", OK: !cfg.Autopilot || auto.Enabled, Details: auto.Reason},
 	}
 	if cfg.ProxyEnabled {
 		items = append(items,
