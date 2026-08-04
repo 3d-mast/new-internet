@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mycelium One</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">NEW INTERNET / MYCELIUM/1</div>
+        <h1>Сеть жива</h1>
+        <p id="identity">Загрузка узла…</p>
+      </div>
+      <button id="connectBtn" class="primary">Подключить узел</button>
+    </header>
+
+    <section class="grid metrics">
+      <article><span>Состояние</span><strong class="good">● В сети</strong></article>
+      <article><span>Доверенные узлы</span><strong id="peerCount">0</strong></article>
+      <article><span>Найдено рядом</span><strong id="discoveredCount">0</strong></article>
+      <article><span>Локальный прокси</span><strong id="socksState">выключен</strong></article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <h2>Разрешения узла</h2>
+        <label>Имя устройства<input id="nodeName"></label>
+        <label class="toggle"><input id="offerExit" type="checkbox"><span>Разрешить доверенным узлам выходить через мой интернет</span></label>
+        <label class="toggle"><input id="socksEnabled" type="checkbox"><span>Включить локальный SOCKS5 для выхода через другой узел</span></label>
+        <label>Выходной узел<select id="selectedExit"><option value="">Не выбран</option></select></label>
+        <button id="saveSettings">Сохранить</button>
+      </article>
+
+      <article class="panel">
+        <h2>Одноразовое приглашение</h2>
+        <p>Отметь ровно то, что получатель сможет делать через этот узел.</p>
+        <label class="toggle"><input id="allowExit" type="checkbox"><span>Использовать интернет этого узла</span></label>
+        <label class="toggle"><input id="allowLan" type="checkbox"><span>Доступ к локальным TCP-сервисам</span></label>
+        <label class="toggle"><input id="allowRelay" type="checkbox"><span>Использовать узел как ретранслятор</span></label>
+        <button id="createInvite">Создать приглашение на 15 минут</button>
+        <textarea id="inviteToken" readonly placeholder="Здесь появится ключ-приглашение"></textarea>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Узлы сети</h2>
+      <div id="peers" class="cards"></div>
+    </section>
+
+    <section class="panel">
+      <h2>TCP-туннель</h2>
+      <div class="form-row">
+        <select id="tunnelPeer"><option value="">Выбери узел</option></select>
+        <input id="tunnelListen" placeholder="127.0.0.1:8080">
+        <input id="tunnelTarget" placeholder="127.0.0.1:80 на удалённом узле">
+        <button id="addTunnel">Создать</button>
+      </div>
+      <div id="tunnels"></div>
+    </section>
+  </main>
+
+  <dialog id="connectDialog">
+    <form method="dialog">
+      <h2>Подключить узел</h2>
+      <p>Вставь одноразовое приглашение. Подмена ключа будет обнаружена автоматически.</p>
+      <textarea id="joinToken" placeholder="myc1.…"></textarea>
+      <div class="actions"><button value="cancel">Отмена</button><button id="joinBtn" value="default" class="primary">Подключить</button></div>
+    </form>
+  </dialog>
+  <div id="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
