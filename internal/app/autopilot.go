@@ -168,17 +168,35 @@ func (a *App) SetAutopilot(enabled bool) error {
 	if a.ctx == nil {
 		return errors.New("application is not running")
 	}
-	if err := a.store.Update(func(cfg *Config) error {
-		cfg.Autopilot = enabled
+	if enabled {
+		if err := a.store.Update(func(cfg *Config) error {
+			cfg.Autopilot = true
+			cfg.AutoRelay = true
+			return nil
+		}); err != nil {
+			return err
+		}
+		a.autopilot.reconcile()
+		a.events.Add("success", "autopilot", "Автопилот включён", "")
+		return nil
+	}
+
+	cfg := a.store.Snapshot()
+	if cfg.SystemProxy {
+		_ = setSystemProxy(false, cfg.HTTPListen)
+	}
+	a.socks.Stop()
+	a.httpProxy.Stop()
+	if err := a.store.Update(func(next *Config) error {
+		next.Autopilot = false
+		next.ProxyEnabled = false
+		next.SystemProxy = false
+		next.SelectedExit = ""
 		return nil
 	}); err != nil {
 		return err
 	}
-	if enabled {
-		a.autopilot.reconcile()
-		a.events.Add("success", "autopilot", "Автопилот включён", "")
-	} else {
-		a.events.Add("info", "autopilot", "Автопилот выключен; сохранён текущий маршрут", "")
-	}
+	a.autopilot.setStatus(AutopilotStatus{Enabled: false, Reason: "сеть остановлена пользователем"})
+	a.events.Add("info", "autopilot", "Сеть и системный прокси остановлены", "")
 	return nil
 }
