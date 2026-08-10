@@ -12,12 +12,18 @@ import (
 
 // Autopilot continuously chooses the best available exit, enables the local
 // proxies only when a healthy route exists and removes the Windows system
-// proxy immediately when every exit disappears. This avoids the most common
-// zero-touch failure mode: leaving the user's internet pointed at a dead proxy.
+// proxy immediately when every exit disappears. Canopy adds two guardrails:
+// route-change confirmation to avoid flapping on one noisy probe and bounded
+// retry backoff when a local proxy/system integration step fails.
 type Autopilot struct {
 	app    *App
 	mu     sync.RWMutex
 	status AutopilotStatus
+
+	pendingExit  string
+	pendingCount int
+	failures     int
+	nextRetry    time.Time
 }
 
 func NewAutopilot(app *App) *Autopilot {
@@ -55,51 +61,151 @@ func (a *Autopilot) setStatus(status AutopilotStatus) {
 func (a *Autopilot) reconcile() {
 	cfg := a.app.store.Snapshot()
 	if !cfg.Autopilot {
+		a.resetTransitionState()
 		a.setStatus(AutopilotStatus{Enabled: false, Active: cfg.ProxyEnabled, SelectedExit: cfg.SelectedExit, Reason: "автопилот выключен"})
 		return
 	}
 
-	exitID, health := selectBestExit(cfg, a.app.node.Health())
+	healthMap := a.app.node.Health()
+	exitID, health := selectBestExit(cfg, healthMap)
 	if exitID == "" {
+		a.resetTransitionState()
 		a.disableDeadRoute(cfg)
 		a.setStatus(AutopilotStatus{Enabled: true, Reason: "ожидание доверенного выходного узла"})
 		return
 	}
 
-	if !a.app.socks.Running() || !a.app.httpProxy.Running() {
-		if err := a.app.startProxies(); err != nil {
-			a.setStatus(AutopilotStatus{Enabled: true, SelectedExit: exitID, Reason: "локальный прокси не запущен: " + err.Error()})
-			return
-		}
-	}
-
-	systemProxy := runtime.GOOS == "windows"
-	if systemProxy {
-		if err := setSystemProxy(true, cfg.HTTPListen); err != nil {
-			a.setStatus(AutopilotStatus{Enabled: true, SelectedExit: exitID, Route: health.Route, LatencyMS: health.LatencyMS, Reason: "не удалось включить системный прокси: " + err.Error()})
-			return
-		}
-	}
-
-	changed := cfg.SelectedExit != exitID || !cfg.ProxyEnabled || cfg.SystemProxy != systemProxy
-	if changed {
-		_ = a.app.store.Update(func(next *Config) error {
-			next.SelectedExit = exitID
-			next.ProxyEnabled = true
-			next.SystemProxy = systemProxy
-			return nil
+	if !a.routeCandidateReady(cfg, healthMap, exitID) {
+		current := healthMap[cfg.SelectedExit]
+		a.setStatus(AutopilotStatus{
+			Enabled: true, Active: cfg.ProxyEnabled, SelectedExit: cfg.SelectedExit,
+			Route: current.Route, LatencyMS: current.LatencyMS,
+			Reason: "проверка более выгодного маршрута перед переключением",
 		})
+		return
+	}
+
+	if !a.nextRetry.IsZero() && time.Now().Before(a.nextRetry) {
+		a.setStatus(AutopilotStatus{
+			Enabled: true, Active: cfg.ProxyEnabled, SelectedExit: cfg.SelectedExit,
+			Route: health.Route, LatencyMS: health.LatencyMS,
+			Reason: "повтор локальной настройки после краткой паузы",
+		})
+		return
+	}
+
+	if err := a.applyRoute(cfg, exitID, health); err != nil {
+		delay := retryDelay(a.failures)
+		a.failures++
+		a.nextRetry = time.Now().Add(delay)
+		a.setStatus(AutopilotStatus{
+			Enabled: true, Active: cfg.ProxyEnabled, SelectedExit: cfg.SelectedExit,
+			Route: health.Route, LatencyMS: health.LatencyMS,
+			Reason: "маршрут найден, локальная настройка не применена: " + err.Error(),
+		})
+		return
+	}
+
+	a.failures = 0
+	a.nextRetry = time.Time{}
+	a.setStatus(AutopilotStatus{
+		Enabled: true, Active: true, SelectedExit: exitID,
+		Route: health.Route, LatencyMS: health.LatencyMS, Reason: "маршрут выбран автоматически",
+	})
+}
+
+func (a *Autopilot) applyRoute(previous Config, exitID string, health PeerHealth) error {
+	systemProxy := runtime.GOOS == "windows"
+	wasSOCKS := a.app.socks.Running()
+	wasHTTP := a.app.httpProxy.Running()
+
+	// Publish the selected exit before accepting new local proxy connections.
+	// Reef started listeners first, leaving a short window where a fresh request
+	// could observe an empty/old SelectedExit and fail despite a healthy route.
+	if err := a.app.store.Update(func(next *Config) error {
+		next.SelectedExit = exitID
+		next.ProxyEnabled = true
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if !wasSOCKS || !wasHTTP {
+		if err := a.app.startProxies(); err != nil {
+			_ = a.app.store.Replace(previous)
+			if !wasSOCKS || !wasHTTP {
+				a.app.socks.Stop()
+				a.app.httpProxy.Stop()
+			}
+			return errors.New("локальный прокси не запущен: " + err.Error())
+		}
+	}
+
+	if systemProxy {
+		if err := setSystemProxy(true, previous.HTTPListen); err != nil {
+			_ = a.app.store.Replace(previous)
+			if !wasSOCKS || !wasHTTP {
+				a.app.socks.Stop()
+				a.app.httpProxy.Stop()
+			}
+			return errors.New("не удалось включить системный прокси: " + err.Error())
+		}
+	}
+
+	changed := previous.SelectedExit != exitID || !previous.ProxyEnabled || previous.SystemProxy != systemProxy
+	if err := a.app.store.Update(func(next *Config) error {
+		next.SelectedExit = exitID
+		next.ProxyEnabled = true
+		next.SystemProxy = systemProxy
+		return nil
+	}); err != nil {
+		return err
+	}
+	if changed {
 		message := "Автопилот выбрал выходной узел " + shortID(exitID)
 		if strings.HasPrefix(health.Route, "relay:") {
 			message += " через защищённый relay"
 		}
 		a.app.events.Add("success", "autopilot", message, exitID)
 	}
+	return nil
+}
 
-	a.setStatus(AutopilotStatus{
-		Enabled: true, Active: true, SelectedExit: exitID,
-		Route: health.Route, LatencyMS: health.LatencyMS, Reason: "маршрут выбран автоматически",
-	})
+func (a *Autopilot) routeCandidateReady(cfg Config, health map[string]PeerHealth, candidate string) bool {
+	if cfg.SelectedExit == "" || candidate == cfg.SelectedExit || !health[cfg.SelectedExit].Online {
+		a.pendingExit = ""
+		a.pendingCount = 0
+		return true
+	}
+	if a.pendingExit != candidate {
+		a.pendingExit = candidate
+		a.pendingCount = 1
+		return false
+	}
+	a.pendingCount++
+	if a.pendingCount < 2 {
+		return false
+	}
+	a.pendingExit = ""
+	a.pendingCount = 0
+	return true
+}
+
+func (a *Autopilot) resetTransitionState() {
+	a.pendingExit = ""
+	a.pendingCount = 0
+	a.failures = 0
+	a.nextRetry = time.Time{}
+}
+
+func retryDelay(failures int) time.Duration {
+	if failures < 0 {
+		failures = 0
+	}
+	if failures > 4 {
+		failures = 4
+	}
+	return time.Second * time.Duration(1<<failures)
 }
 
 func (a *Autopilot) disableDeadRoute(cfg Config) {
@@ -176,6 +282,7 @@ func (a *App) SetAutopilot(enabled bool) error {
 		}); err != nil {
 			return err
 		}
+		a.autopilot.resetTransitionState()
 		a.autopilot.reconcile()
 		a.events.Add("success", "autopilot", "Автопилот включён", "")
 		return nil
@@ -196,6 +303,7 @@ func (a *App) SetAutopilot(enabled bool) error {
 	}); err != nil {
 		return err
 	}
+	a.autopilot.resetTransitionState()
 	a.autopilot.setStatus(AutopilotStatus{Enabled: false, Reason: "сеть остановлена пользователем"})
 	a.events.Add("info", "autopilot", "Сеть и системный прокси остановлены", "")
 	return nil
