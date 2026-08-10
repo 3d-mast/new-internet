@@ -1,13 +1,18 @@
 package app
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 )
 
-const maxFrameSize = 1 << 20
+// Control frames are intentionally small. Keeping a tight bound limits memory
+// amplification from an authenticated-but-malicious or misconfigured peer while
+// leaving plenty of room for current and future handshake metadata.
+const maxFrameSize = 64 << 10
 
 type Hello struct {
 	Version    string `json:"version"`
@@ -52,10 +57,8 @@ func writeFrame(w io.Writer, value any) error {
 	}
 	var size [4]byte
 	binary.BigEndian.PutUint32(size[:], uint32(len(raw)))
-	if _, err := w.Write(size[:]); err != nil {
-		return err
-	}
-	_, err = w.Write(raw)
+	buffers := net.Buffers{size[:], raw}
+	_, err = buffers.WriteTo(w)
 	return err
 }
 
@@ -72,5 +75,18 @@ func readFrame(r io.Reader, value any) error {
 	if _, err := io.ReadFull(r, raw); err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, value)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	// Unknown JSON fields remain accepted for forward/backward compatibility,
+	// but a frame must contain exactly one JSON value with no appended payload.
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("frame contains trailing JSON value")
+		}
+		return errors.New("frame contains trailing data")
+	}
+	return nil
 }
