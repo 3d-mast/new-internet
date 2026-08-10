@@ -57,7 +57,8 @@ func writeFrame(w io.Writer, value any) error {
 	}
 	var size [4]byte
 	binary.BigEndian.PutUint32(size[:], uint32(len(raw)))
-	_, err = (net.Buffers{size[:], raw}).WriteTo(w)
+	buffers := net.Buffers{size[:], raw}
+	_, err = buffers.WriteTo(w)
 	return err
 }
 
