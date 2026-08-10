@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 )
 
 // Control frames are intentionally small. Keeping a tight bound limits memory
@@ -56,31 +57,8 @@ func writeFrame(w io.Writer, value any) error {
 	}
 	var size [4]byte
 	binary.BigEndian.PutUint32(size[:], uint32(len(raw)))
-	buffers := netBuffers(size[:], raw)
-	_, err = buffers.WriteTo(w)
+	_, err = (net.Buffers{size[:], raw}).WriteTo(w)
 	return err
-}
-
-// netBuffers is kept as a tiny wrapper so framing tests can stay independent
-// from concrete network connections while production writes use a single
-// vectored operation where the platform supports it.
-func netBuffers(parts ...[]byte) bufferWriter { return bufferWriter(parts) }
-
-type bufferWriter [][]byte
-
-func (b bufferWriter) WriteTo(w io.Writer) (int64, error) {
-	var total int64
-	for _, part := range b {
-		n, err := w.Write(part)
-		total += int64(n)
-		if err != nil {
-			return total, err
-		}
-		if n != len(part) {
-			return total, io.ErrShortWrite
-		}
-	}
-	return total, nil
 }
 
 func readFrame(r io.Reader, value any) error {
