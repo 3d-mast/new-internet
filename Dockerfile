@@ -3,15 +3,15 @@ WORKDIR /src
 COPY go.mod ./
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go test ./... && \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/reef ./cmd/reef
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/canopy ./cmd/canopy
 
 FROM alpine:3.22
-RUN addgroup -S reef && adduser -S -G reef reef
-COPY --from=build /out/reef /usr/local/bin/reef
-COPY LICENSE NOTICE /usr/share/doc/reef/
-RUN mkdir -p /data && chown reef:reef /data
-USER reef
+RUN addgroup -S canopy && adduser -S -G canopy canopy
+COPY --from=build /out/canopy /usr/local/bin/canopy
+COPY LICENSE NOTICE /usr/share/doc/canopy/
+RUN mkdir -p /data && chown canopy:canopy /data
+USER canopy
 VOLUME ["/data"]
 EXPOSE 47831/tcp
 EXPOSE 47830/udp
-ENTRYPOINT ["/usr/local/bin/reef", "--server", "--no-browser", "--data-dir", "/data"]
+ENTRYPOINT ["/usr/local/bin/canopy", "--server", "--no-browser", "--data-dir", "/data"]
