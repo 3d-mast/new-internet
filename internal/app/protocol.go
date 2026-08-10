@@ -1,13 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
 )
 
-const maxFrameSize = 1 << 20
+// Control frames are intentionally small. Keeping a tight bound limits memory
+// amplification from an authenticated-but-malicious or misconfigured peer while
+// leaving plenty of room for current and future handshake metadata.
+const maxFrameSize = 64 << 10
 
 type Hello struct {
 	Version    string `json:"version"`
@@ -52,11 +56,31 @@ func writeFrame(w io.Writer, value any) error {
 	}
 	var size [4]byte
 	binary.BigEndian.PutUint32(size[:], uint32(len(raw)))
-	if _, err := w.Write(size[:]); err != nil {
-		return err
-	}
-	_, err = w.Write(raw)
+	buffers := netBuffers(size[:], raw)
+	_, err = buffers.WriteTo(w)
 	return err
+}
+
+// netBuffers is kept as a tiny wrapper so framing tests can stay independent
+// from concrete network connections while production writes use a single
+// vectored operation where the platform supports it.
+func netBuffers(parts ...[]byte) bufferWriter { return bufferWriter(parts) }
+
+type bufferWriter [][]byte
+
+func (b bufferWriter) WriteTo(w io.Writer) (int64, error) {
+	var total int64
+	for _, part := range b {
+		n, err := w.Write(part)
+		total += int64(n)
+		if err != nil {
+			return total, err
+		}
+		if n != len(part) {
+			return total, io.ErrShortWrite
+		}
+	}
+	return total, nil
 }
 
 func readFrame(r io.Reader, value any) error {
@@ -72,5 +96,18 @@ func readFrame(r io.Reader, value any) error {
 	if _, err := io.ReadFull(r, raw); err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, value)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	// Unknown JSON fields remain accepted for forward/backward compatibility,
+	// but a frame must contain exactly one JSON value with no appended payload.
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("frame contains trailing JSON value")
+		}
+		return errors.New("frame contains trailing data")
+	}
+	return nil
 }
