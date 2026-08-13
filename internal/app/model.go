@@ -3,16 +3,16 @@ package app
 import "time"
 
 const (
-	ProductName       = "Canopy"
-	ReleaseVersion    = "5.0.0"
-	ProtocolVersion   = "LICHEN/2" // Stable wire protocol keeps Canopy compatible with Reef, Rhizome and Lichen peers.
-	InvitePrefix      = "lch1."
-	CurrentConfig     = 3
+	ProductName       = "Boreal"
+	ReleaseVersion    = "6.0.0"
+	ProtocolVersion   = "BOREAL/1"
+	InvitePrefix      = "bor1."
+	CurrentConfig     = 6
 	DefaultMeshPort   = 47831
 	DefaultAPIPort    = 47832
 	DefaultSOCKSPort  = 1088
 	DefaultHTTPPort   = 1089
-	DefaultProbeEvery = 12 * time.Second
+	DefaultProbeEvery = 8 * time.Second
 )
 
 type Permissions struct {
